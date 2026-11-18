@@ -1283,9 +1283,9 @@ Code: %s</string>
   <string name="preferences_themeSelection_system">System</string>
   <string name="preferences_radixConnect_title">Radix Connect</string>
   <string name="preferences_radixConnect_connectionMethod">Connection Method</string>
-  <string name="preferences_radixConnect_automatic_title">Automatic</string>
+  <string name="preferences_radixConnect_automatic_title">Automatic (default)</string>
   <string name="preferences_radixConnect_automatic_subtitle">Uses WebRTC, and iroh with the connectors that support it</string>
-  <string name="preferences_radixConnect_webRtc_title">WebRTC only (default)</string>
+  <string name="preferences_radixConnect_webRtc_title">WebRTC only</string>
   <string name="preferences_radixConnect_webRtc_subtitle">Uses only WebRTC, through the signaling server</string>
   <string name="preferences_radixConnect_iroh_title">iroh only</string>
   <string name="preferences_radixConnect_iroh_subtitle">Only connectors with iroh (e.g. servers) will connect</string>
