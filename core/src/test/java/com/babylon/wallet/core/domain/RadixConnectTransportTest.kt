@@ -7,8 +7,8 @@ import rdx.works.core.domain.RadixConnectTransport
 class RadixConnectTransportTest {
 
     @Test
-    fun `the default transport is WebRTC, so iroh is opt-in`() {
-        assertEquals(RadixConnectTransport.WEBRTC, RadixConnectTransport.DEFAULT)
+    fun `the tester build uses Automatic by default`() {
+        assertEquals(RadixConnectTransport.AUTOMATIC, RadixConnectTransport.DEFAULT)
     }
 
     @Test

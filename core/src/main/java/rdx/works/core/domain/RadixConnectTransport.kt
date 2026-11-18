@@ -33,7 +33,7 @@ enum class RadixConnectTransport(
          * iroh is opt-in: until the user picks [AUTOMATIC] or [IROH], the wallet only uses WebRTC and never
          * contacts an iroh relay.
          */
-        val DEFAULT = WEBRTC
+        val DEFAULT = AUTOMATIC // tester build: iroh on by default
 
         /**
          * A missing or unknown value (e.g. one stored by a newer version of the app) falls back to [DEFAULT].
