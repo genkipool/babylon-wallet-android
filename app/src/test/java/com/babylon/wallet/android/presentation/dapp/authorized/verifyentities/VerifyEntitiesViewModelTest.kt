@@ -15,7 +15,8 @@ import com.radixdlt.sargon.Gateway
 import com.radixdlt.sargon.NetworkId
 import com.radixdlt.sargon.Profile
 import com.radixdlt.sargon.SignatureWithPublicKey
-import com.radixdlt.sargon.extensions.forNetwork
+import com.radixdlt.sargon.extensions.mainnet
+import com.radixdlt.sargon.extensions.string
 import com.radixdlt.sargon.newWalletInteractionVersionCurrent
 import com.radixdlt.sargon.samples.sample
 import com.radixdlt.sargon.samples.sampleMainnet
@@ -45,7 +46,7 @@ internal class VerifyEntitiesViewModelTest : StateViewModelTest<VerifyEntitiesVi
     private val incomingRequestRepository = mockk<IncomingRequestRepository>()
     private val signAuthUseCase = mockk<SignAuthUseCase>()
 
-    private val profile = Profile.sample().changeGateway(Gateway.forNetwork(NetworkId.MAINNET)).unHideAllEntities()
+    private val profile = Profile.sample().changeGateway(Gateway.mainnet).unHideAllEntities()
     private val persona = profile.currentNetwork!!.personas.first()
     private val personaSignature = mockk<SignatureWithPublicKey>()
 
