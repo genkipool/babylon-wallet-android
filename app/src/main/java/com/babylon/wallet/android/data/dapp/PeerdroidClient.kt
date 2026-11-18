@@ -23,7 +23,6 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.cancellable
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
@@ -101,15 +100,14 @@ class PeerdroidClientImpl @Inject constructor(
     override val hasAtLeastOneConnection: Flow<Boolean>
         get() = peerdroidConnector.anyChannelConnected
 
+    // Each connection on its own: one still connecting (or a connector that never comes back)
+    // must not hold back the ones already open.
     override val openConnectionIds: Flow<Set<String>>
         get() = peerdroidConnector.peerConnectionStatus
-            .filter { connectionStatuses ->
-                connectionStatuses.isNotEmpty() &&
-                    !connectionStatuses.any { it.value == PeerConnectionStatus.CONNECTING }
-            }
             .map { statuses ->
                 statuses.filter { it.value == PeerConnectionStatus.OPEN }.keys
             }
+            .distinctUntilChanged()
 
     override fun isConnectionOpen(remoteConnectorId: String): Flow<Boolean> =
         peerdroidConnector.peerConnectionStatus

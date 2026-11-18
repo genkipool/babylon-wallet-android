@@ -34,8 +34,6 @@ class FakePreferenceManager : PreferencesManager {
         get() = TODO("Not yet implemented")
     override val isLinkConnectionStatusIndicatorEnabled: Flow<Boolean>
         get() = TODO("Not yet implemented")
-    override val lastSyncedAccountsWithCE: Flow<String?>
-        get() = TODO("Not yet implemented")
     override val showRelinkConnectorsAfterUpdate: Flow<Boolean?>
         get() = TODO("Not yet implemented")
     override val showRelinkConnectorsAfterProfileRestore: Flow<Boolean>
@@ -107,14 +105,6 @@ class FakePreferenceManager : PreferencesManager {
     }
 
     override suspend fun setLinkConnectionStatusIndicator(isEnabled: Boolean) {
-        TODO("Not yet implemented")
-    }
-
-    override suspend fun updateLastSyncedAccountsWithCE(accountsHash: String) {
-        TODO("Not yet implemented")
-    }
-
-    override suspend fun removeLastSyncedAccountsWithCE() {
         TODO("Not yet implemented")
     }
 
