@@ -2,10 +2,13 @@ package com.babylon.wallet.android.data.dapp
 
 import com.babylon.wallet.android.data.repository.p2plink.RetiredP2PLinksRepository
 import com.babylon.wallet.android.domain.model.messages.IncomingMessage
+import com.radixdlt.sargon.AccountAddress
 import com.radixdlt.sargon.P2pTransportProfile
 import io.mockk.coEvery
 import io.mockk.mockk
 import com.radixdlt.sargon.RadixConnectPassword
+import com.radixdlt.sargon.extensions.string
+import com.radixdlt.sargon.samples.sampleMainnet
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -38,6 +41,13 @@ class PeerdroidClientImplTest {
         coEvery { isRetired(any()) } answers { firstArg<String>() in retiredConnectorIds }
     }
     private val logged = mutableListOf<String>()
+
+    // A well-formed request of an older interaction version: the wallet answers it with a failure.
+    private val incompatibleRequest = """
+        {"items":{"discriminator":"unauthorizedRequest","oneTimeAccounts":{"numberOfAccounts":{"quantity":1,"quantifier":"exactly"}}},
+        "interactionId":"1","metadata":{"version":1,"networkId":1,"origin":"https://dapp.example.com",
+        "dAppDefinitionAddress":"${AccountAddress.sampleMainnet().string}"}}
+    """.trimIndent()
     private val sent = mutableListOf<String>()
 
     private val tree = object : Timber.Tree() {
@@ -81,7 +91,8 @@ class PeerdroidClientImplTest {
             peerdroidConnector = connector,
             retiredP2PLinksRepository = retired,
             ioDispatcher = UnconfinedTestDispatcher(testScheduler),
-            json = Json { ignoreUnknownKeys = true }
+            json = Json { ignoreUnknownKeys = true },
+            applicationScope = backgroundScope
         )
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { sut.listenForIncomingRequests().collect {} }
         runCurrent()
@@ -132,8 +143,7 @@ class PeerdroidClientImplTest {
         retiredConnectorIds += connectionId
 
         // Even a request of an incompatible version, which would otherwise be answered with a failure.
-        val request = """{"interactionId":"1","metadata":{"version":1,"networkId":1,"origin":"https://dapp.example.com","dAppDefinitionAddress":"x"},"items":{}}"""
-        incoming.emit(DataChannelWrapperEvent.MessageFromRemoteConnectionId(ConnectionIdHolder(connectionId), request))
+        incoming.emit(DataChannelWrapperEvent.MessageFromRemoteConnectionId(ConnectionIdHolder(connectionId), incompatibleRequest))
         runCurrent()
 
         assertTrue(messages.isEmpty())
@@ -141,11 +151,30 @@ class PeerdroidClientImplTest {
         assertTrue(logged.toString(), logged.any { it.startsWith("🤖 link=1a2b3c4d ignored a message") })
     }
 
+    @Test
+    fun `each message is parsed once and answered once, however many listen`() = runTest {
+        val sut = client()
+        // As the wallet listens: requests, their errors and link removals all the time, ledger responses while waiting
+        // for the ledger.
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { sut.listenForIncomingRequests().collect {} }
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { sut.listenForIncomingRequestErrors().collect {} }
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { sut.listenForLinkRemovals().collect {} }
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { sut.listenForLedgerResponses().collect {} }
+        runCurrent()
+
+        incoming.emit(DataChannelWrapperEvent.MessageFromRemoteConnectionId(ConnectionIdHolder(connectionId), incompatibleRequest))
+        runCurrent()
+
+        assertEquals("the dApp gets one failure", 1, sent.size)
+        assertEquals(logged.toString(), 1, logged.count { it.startsWith("🤖 link=1a2b3c4d rejected interaction=1") })
+    }
+
     private fun TestScope.client() = PeerdroidClientImpl(
         peerdroidConnector = connector,
         retiredP2PLinksRepository = retired,
         ioDispatcher = UnconfinedTestDispatcher(testScheduler),
-        json = Json { ignoreUnknownKeys = true }
+        json = Json { ignoreUnknownKeys = true },
+        applicationScope = backgroundScope
     )
 
     private companion object {

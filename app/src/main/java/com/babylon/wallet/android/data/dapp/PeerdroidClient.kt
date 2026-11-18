@@ -19,13 +19,17 @@ import com.radixdlt.sargon.WalletToDappInteractionResponse
 import com.radixdlt.sargon.extensions.fromJson
 import com.radixdlt.sargon.extensions.toJson
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.cancellable
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.shareIn
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
@@ -94,7 +98,8 @@ class PeerdroidClientImpl @Inject constructor(
     private val peerdroidConnector: PeerdroidConnector,
     private val retiredP2PLinksRepository: RetiredP2PLinksRepository,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
-    private val json: Json
+    private val json: Json,
+    applicationScope: CoroutineScope
 ) : PeerdroidClient {
 
     override val hasAtLeastOneConnection: Flow<Boolean>
@@ -138,37 +143,39 @@ class PeerdroidClientImpl @Inject constructor(
         return peerdroidConnector.sendDataChannelMessageToAllRemoteClients(message)
     }
 
-    private fun listenForIncomingMessages(): Flow<IncomingMessage> {
-        return peerdroidConnector
-            .dataChannelMessagesFromRemoteClients
-            .filterIsInstance<DataChannelWrapperEvent.MessageFromRemoteConnectionId>()
-            .map { messageFromRemoteClient ->
-                parseIncomingMessage(
-                    remoteConnectorId = messageFromRemoteClient.connectionIdHolder.id,
-                    messageInJsonString = messageFromRemoteClient.messageInJsonString
-                )
-            }.catch { exception ->
-                // The error type only, to keep log lines short.
-                Timber.tag(LOG_TAG).e("🤖 stopped reading incoming messages: ${exception.javaClass.simpleName}")
-            }
-            .cancellable()
-            .flowOn(ioDispatcher)
-    }
+    // Every message from the connector extensions, parsed once and shared by all who listen (requests, their errors,
+    // link removals, ledger responses): each listener parsing on its own would also send its answers (the failure
+    // for a request of an incompatible version) once per listener.
+    private val incomingMessages: SharedFlow<IncomingMessage> = peerdroidConnector
+        .dataChannelMessagesFromRemoteClients
+        .filterIsInstance<DataChannelWrapperEvent.MessageFromRemoteConnectionId>()
+        .map { messageFromRemoteClient ->
+            parseIncomingMessage(
+                remoteConnectorId = messageFromRemoteClient.connectionIdHolder.id,
+                messageInJsonString = messageFromRemoteClient.messageInJsonString
+            )
+        }.catch { exception ->
+            // The error type only, to keep log lines short.
+            Timber.tag(LOG_TAG).e("🤖 stopped reading incoming messages: ${exception.javaClass.simpleName}")
+        }
+        .cancellable()
+        .flowOn(ioDispatcher)
+        .shareIn(scope = applicationScope, started = SharingStarted.WhileSubscribed())
 
     override fun listenForIncomingRequests(): Flow<DappToWalletInteraction> {
-        return listenForIncomingMessages().filterIsInstance()
+        return incomingMessages.filterIsInstance()
     }
 
     override fun listenForIncomingRequestErrors(): Flow<IncomingMessage.Error> {
-        return listenForIncomingMessages().filterIsInstance()
+        return incomingMessages.filterIsInstance()
     }
 
     override fun listenForLinkRemovals(): Flow<IncomingMessage.LinkRemoved> {
-        return listenForIncomingMessages().filterIsInstance()
+        return incomingMessages.filterIsInstance()
     }
 
     override fun listenForLedgerResponses(): Flow<LedgerResponse> {
-        return listenForIncomingMessages().filterIsInstance()
+        return incomingMessages.filterIsInstance()
     }
 
     override suspend fun deleteLink(connectionPassword: RadixConnectPassword) {
