@@ -35,7 +35,6 @@ interface PreferencesManager {
     val isDeviceRootedDialogShown: Flow<Boolean>
     val isCrashReportingEnabled: Flow<Boolean>
     val isLinkConnectionStatusIndicatorEnabled: Flow<Boolean>
-    val lastSyncedAccountsWithCE: Flow<String?>
     val showRelinkConnectorsAfterUpdate: Flow<Boolean?>
     val showRelinkConnectorsAfterProfileRestore: Flow<Boolean>
     val isEulaAccepted: Flow<Boolean>
@@ -68,10 +67,6 @@ interface PreferencesManager {
     suspend fun markDeviceRootedDialogShown()
 
     suspend fun setLinkConnectionStatusIndicator(isEnabled: Boolean)
-
-    suspend fun updateLastSyncedAccountsWithCE(accountsHash: String)
-
-    suspend fun removeLastSyncedAccountsWithCE()
 
     suspend fun setShowRelinkConnectorsAfterUpdate(show: Boolean)
 
@@ -174,11 +169,6 @@ class PreferencesManagerImpl @Inject constructor(
             preferences[KEY_DEVICE_ROOTED_DIALOG_SHOWN] ?: false
         }
 
-    override val lastSyncedAccountsWithCE: Flow<String?> = dataStore.data
-        .map { preferences ->
-            preferences[KEY_LAST_SYNCED_ACCOUNTS_WITH_CE]
-        }
-
     override suspend fun markImportFromOlympiaComplete() {
         dataStore.edit { preferences ->
             preferences[KEY_IMPORT_OLYMPIA_WALLET_SETTING_DISMISSED] = true
@@ -257,18 +247,6 @@ class PreferencesManagerImpl @Inject constructor(
         }
     }
 
-    override suspend fun updateLastSyncedAccountsWithCE(accountsHash: String) {
-        dataStore.edit { preferences ->
-            preferences[KEY_LAST_SYNCED_ACCOUNTS_WITH_CE] = accountsHash
-        }
-    }
-
-    override suspend fun removeLastSyncedAccountsWithCE() {
-        dataStore.edit { preferences ->
-            preferences.remove(KEY_LAST_SYNCED_ACCOUNTS_WITH_CE)
-        }
-    }
-
     override suspend fun setShowRelinkConnectorsAfterUpdate(show: Boolean) {
         dataStore.edit { preferences ->
             preferences[KEY_SHOW_RELINK_CONNECTORS_AFTER_UPDATE] = show
@@ -313,7 +291,6 @@ class PreferencesManagerImpl @Inject constructor(
         val KEY_IMPORT_OLYMPIA_WALLET_SETTING_DISMISSED = booleanPreferencesKey("import_olympia_wallet_setting_dismissed")
         val KEY_DEVICE_ROOTED_DIALOG_SHOWN = booleanPreferencesKey("device_rooted_dialog_shown")
         val KEY_LINK_CONNECTION_STATUS_INDICATOR = booleanPreferencesKey("link_connection_status_indicator")
-        val KEY_LAST_SYNCED_ACCOUNTS_WITH_CE = stringPreferencesKey("last_synced_accounts_with_ce")
         val KEY_SHOW_RELINK_CONNECTORS_AFTER_UPDATE = booleanPreferencesKey("show_relink_connectors_after_update")
         val KEY_SHOW_RELINK_CONNECTORS_AFTER_PROFILE_RESTORE = booleanPreferencesKey("show_relink_connectors_after_profile_restore")
         val KEY_EULA_ACCEPTED = booleanPreferencesKey("eula_accepted")

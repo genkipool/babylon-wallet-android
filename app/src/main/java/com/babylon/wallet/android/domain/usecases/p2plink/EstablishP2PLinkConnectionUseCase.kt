@@ -15,7 +15,6 @@ import com.radixdlt.sargon.extensions.toBagOfBytes
 import com.radixdlt.sargon.os.SargonOsManager
 import kotlinx.coroutines.CoroutineDispatcher
 import rdx.works.core.di.DefaultDispatcher
-import rdx.works.core.preferences.PreferencesManager
 import rdx.works.core.then
 import rdx.works.core.toHexString
 import rdx.works.peerdroid.data.PeerdroidLink
@@ -28,7 +27,6 @@ class EstablishP2PLinkConnectionUseCase @Inject constructor(
     private val peerdroidLink: PeerdroidLink,
     private val p2PLinksRepository: P2PLinksRepository,
     private val encryptedPreferencesManager: EncryptedPreferencesManager,
-    private val preferencesManager: PreferencesManager,
     private val sargonOsManager: SargonOsManager,
     @DefaultDispatcher private val dispatcher: CoroutineDispatcher
 ) {
@@ -84,7 +82,6 @@ class EstablishP2PLinkConnectionUseCase @Inject constructor(
 
                         return peerdroidLink.sendMessage(connectionId, linkClientInteraction)
                             .onSuccess {
-                                preferencesManager.removeLastSyncedAccountsWithCE()
                                 p2PLinksRepository.addOrUpdateP2PLink(p2pLink)
                             }
                     }
