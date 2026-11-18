@@ -128,10 +128,12 @@ class AddLinkConnectorViewModel @Inject constructor(
         exitLinking(false)
     }
 
+    // One linking at a time: a second tap on the button while the first one links would link the same connector again,
+    // in parallel. The flag is set before anything is launched, so no tap can slip in between.
     private fun establishLinkConnection(operation: suspend () -> Result<Unit>) {
+        if (state.value.isAddingNewLinkConnectorInProgress) return
+        _state.update { it.copy(isAddingNewLinkConnectorInProgress = true) }
         viewModelScope.launch {
-            _state.update { it.copy(isAddingNewLinkConnectorInProgress = true) }
-
             operation().onFailure { throwable ->
                 _state.update {
                     it.copy(
