@@ -4,6 +4,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.buffer
 import kotlinx.coroutines.flow.flowOn
@@ -15,8 +16,11 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.webrtc.DataChannel
 import rdx.works.peerdroid.data.PackageDto
+import rdx.works.peerdroid.data.describe
+import rdx.works.peerdroid.data.logId
 import rdx.works.peerdroid.domain.ConnectionIdHolder
 import rdx.works.peerdroid.domain.DataChannelWrapperEvent
+import rdx.works.peerdroid.domain.MessageNotSentException
 import rdx.works.peerdroid.messagechunking.assembleChunks
 import rdx.works.peerdroid.messagechunking.splitMessage
 import rdx.works.peerdroid.messagechunking.verifyAssembledMessage
@@ -32,7 +36,7 @@ data class DataChannelWrapper(
 
     init {
         Timber.d(
-            "📯 init DataChannelWrapper for remote connector: ${connectionIdHolder.id} " +
+            "📯 init DataChannelWrapper for ${connectionIdHolder.logId} " +
                 "with label the remote client id ${this.webRtcDataChannel.label()}",
         )
     }
@@ -42,8 +46,29 @@ data class DataChannelWrapper(
     // message left half sent (its sender cancelled after the first package) keeps it from reading later ones.
     private val sending = Mutex()
 
+    /**
+     * Sends [message] in chunks. Fails with [MessageNotSentException] when the data channel did not take its first
+     * package (closed, or its send buffer is full), since the connector extension then cannot have received anything.
+     *
+     * The link is reported open as soon as its peer connection is, which can be a few milliseconds before the data
+     * channel itself: a message sent then (the account list, as the link opens) waits for the channel to open.
+     */
     suspend fun sendMessage(message: String): Result<Unit> = sending.withLock {
-        withContext(NonCancellable) { sendChunked(message) }
+        withContext(NonCancellable) {
+            awaitOpenChannel()
+            sendChunked(message)
+        }
+    }
+
+    private suspend fun awaitOpenChannel() {
+        var waitedMs = 0L
+        // A disposed channel throws on state(): it is not opening, and the send then fails as before.
+        while (runCatching { webRtcDataChannel.state() }.getOrNull() == DataChannel.State.CONNECTING &&
+            waitedMs < OPEN_TIMEOUT_MS
+        ) {
+            delay(OPEN_POLL_MS)
+            waitedMs += OPEN_POLL_MS
+        }
     }
 
     private suspend fun sendChunked(message: String): Result<Unit> {
@@ -52,24 +77,38 @@ data class DataChannelWrapper(
             listOfPackages.forEachIndexed { index, packageDto ->
                 if (index == 0) {
                     val metadata = packageDto as PackageDto.MetaData
-                    Timber.d("📯 send message 📦 with messageId = ${metadata.messageId} to remote connector: ${connectionIdHolder.id}")
-                    send(packageDto = metadata)
+                    Timber.d(
+                        "📯 send message 📦 with messageId = ${metadata.messageId} (${listOfPackages.size - 1} chunks) " +
+                            "to ${connectionIdHolder.logId}"
+                    )
+                    if (!send(packageDto = metadata)) {
+                        return Result.failure(MessageNotSentException(rejectedPackageReason()))
+                    }
                 } else {
                     val chunk = packageDto as PackageDto.Chunk
-                    send(packageDto = chunk)
+                    if (!send(packageDto = chunk)) {
+                        // Part of the message is out: it must not be sent again over another transport.
+                        return Result.failure(IllegalStateException("${rejectedPackageReason()} after $index packages"))
+                    }
                 }
             }
             Result.success(Unit)
         } catch (iobe: IndexOutOfBoundsException) {
-            Timber.e("📯 failed to wrap byte array to byte buffer: ${iobe.localizedMessage}❗")
+            Timber.e("📯 failed to wrap byte array to byte buffer: ${iobe.describe()}❗")
             Result.failure(Throwable("failed to wrap byte array to byte buffer: ${iobe.localizedMessage}"))
         } catch (exception: Exception) {
             if (exception is CancellationException) {
                 throw exception
             }
-            Timber.e("📯 failed to convert and send the message: ${exception.localizedMessage}❗")
+            Timber.e("📯 failed to convert and send the message: ${exception.describe()}❗")
             Result.failure(Throwable("failed to send message with exception: ${exception.localizedMessage}"))
         }
+    }
+
+    private fun rejectedPackageReason(): String {
+        val channelState = runCatching { "state ${webRtcDataChannel.state()}, ${webRtcDataChannel.bufferedAmount()} bytes buffered" }
+            .getOrElse { "disposed" }
+        return "the data channel did not accept the message ($channelState)"
     }
 
     private val currentListOfChunks = mutableListOf<PackageDto.Chunk>()
@@ -111,11 +150,11 @@ data class DataChannelWrapper(
                         }
                     }
                     is DataChannelMessage.RemoteConnectorReceivedMessage.Confirmation -> {
-                        Timber.d("📯 remote connector ${connectionIdHolder.id} received the message❕ ⬅️️")
+                        Timber.d("📯 ${connectionIdHolder.logId} received the message❕ ⬅️️")
                         emit(DataChannelEvent.ReceiveMessage.Confirmation(messageId = dataChannelMessage.messageId))
                     }
                     is DataChannelMessage.RemoteConnectorReceivedMessage.Error -> {
-                        Timber.d("📯 remote connector ${connectionIdHolder.id} failed to receive the message❗️ ⬅️️")
+                        Timber.d("📯 ${connectionIdHolder.logId} failed to receive the message❗️ ⬅️️")
                         emit(DataChannelEvent.ReceiveMessage.Error(messageId = dataChannelMessage.messageId))
                     }
                     is DataChannelMessage.StateChanged -> {
@@ -142,7 +181,7 @@ data class DataChannelWrapper(
                                 )
                                 Timber.d(
                                     "📯 forward the complete message with messageId = ${dataChannelEvent.messageId} " +
-                                        "from remote connector ${connectionIdHolder.id} to the wallet ✅"
+                                        "from ${connectionIdHolder.logId} to the wallet ✅"
                                 )
                             }
                             .onFailure {
@@ -150,7 +189,7 @@ data class DataChannelWrapper(
                             }
                     }
                     is DataChannelEvent.StateChanged -> {
-                        Timber.d("📯 state for remote connector: ${connectionIdHolder.id} changed: ${dataChannelEvent.state} 📶️")
+                        Timber.d("📯 state for ${connectionIdHolder.logId} changed: ${dataChannelEvent.state} 📶️")
                         emit(
                             DataChannelWrapperEvent.StateChangedForRemoteConnector(
                                 connectionIdHolder = connectionIdHolder,
@@ -211,7 +250,7 @@ data class DataChannelWrapper(
         val confirmationDto = PackageDto.ReceiveMessageConfirmation(
             messageId = messageId
         )
-        Timber.d("📯 send ReceiveMessageConfirmation ❕ for messageId = $messageId to remote connector ${connectionIdHolder.id} ➡️")
+        Timber.d("📯 send ReceiveMessageConfirmation ❕ for messageId = $messageId to ${connectionIdHolder.logId} ➡️")
         return sending.withLock { send(packageDto = confirmationDto) }
     }
 
@@ -220,7 +259,7 @@ data class DataChannelWrapper(
         val errorDto = PackageDto.ReceiveMessageError(
             messageId = messageId
         )
-        Timber.d("📯 send sendReceiveMessageError ❗️ or messageId = $messageId to remote connector ${connectionIdHolder.id} ➡️")
+        Timber.d("📯 send sendReceiveMessageError ❗️ or messageId = $messageId to ${connectionIdHolder.logId} ➡️")
         return sending.withLock { send(errorDto) }
     }
 
@@ -236,14 +275,19 @@ data class DataChannelWrapper(
     fun close() {
         Timber.d(
             "📯 DataChannelWrapper of ${this.webRtcDataChannel} close for remote connector: " +
-                "${connectionIdHolder.id} 🔻 and with remote client id ${this.webRtcDataChannel.label()}"
+                "${connectionIdHolder.logId} 🔻 and with remote client id ${this.webRtcDataChannel.label()}"
         )
         // The observer is left to the channel's event flow, which unregisters it when it ends (the channel closing
         // ends it): unregistering it here first kept that flow, and the reader collecting it, alive for good.
         webRtcDataChannel.close()
         Timber.d(
             "📯 ${this.webRtcDataChannel} state: ${this.webRtcDataChannel.state()}, for remote connector: " +
-                "${connectionIdHolder.id} and with remote client id ${this.webRtcDataChannel.label()}"
+                "${connectionIdHolder.logId} and with remote client id ${this.webRtcDataChannel.label()}"
         )
+    }
+
+    private companion object {
+        const val OPEN_POLL_MS = 20L
+        const val OPEN_TIMEOUT_MS = 5_000L
     }
 }

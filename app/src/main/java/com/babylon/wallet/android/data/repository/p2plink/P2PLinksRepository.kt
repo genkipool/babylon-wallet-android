@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import rdx.works.core.di.IoDispatcher
 import rdx.works.core.preferences.PreferencesManager
+import rdx.works.peerdroid.domain.ConnectionIdHolder
 import rdx.works.profile.datastore.EncryptedPreferencesManager
 import javax.inject.Inject
 
@@ -31,7 +32,11 @@ interface P2PLinksRepository {
 
     suspend fun addOrUpdateP2PLink(p2pLink: P2pLink)
 
+    /** Removed by the user: the connector extension is told (see [LinkRemovalNotifier]), then the connector deleted. */
     suspend fun removeP2PLink(id: PublicKeyHash)
+
+    /** Removed by the connector extension: its connector is deleted at once. The link removed, if it was one. */
+    suspend fun removeP2PLinkRemovedByConnector(connectorId: String): P2pLink?
 
     fun showRelinkConnectors(): Flow<Boolean>
 
@@ -44,6 +49,7 @@ interface P2PLinksRepository {
 
 class P2PLinksRepositoryImpl @Inject constructor(
     private val peerdroidClient: PeerdroidClient,
+    private val retiredP2PLinksRepository: RetiredP2PLinksRepository,
     private val encryptedPreferencesManager: EncryptedPreferencesManager,
     private val preferencesManager: PreferencesManager,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher
@@ -95,8 +101,21 @@ class P2PLinksRepositoryImpl @Inject constructor(
             val p2pLink = p2pLinks.getBy(id) ?: return@withContext
             val newP2PLinks = getSavedP2PLinks().remove(p2pLink)
 
+            // Removed first: should the app stop in between, a link is never both linked and retired.
             saveP2PLinks(newP2PLinks.asList())
+            retiredP2PLinksRepository.retire(p2pLink.connectionPassword)
+        }
+    }
+
+    override suspend fun removeP2PLinkRemovedByConnector(connectorId: String): P2pLink? {
+        return withContext(ioDispatcher) {
+            val p2pLinks = getSavedP2PLinks()
+            val p2pLink = p2pLinks.asList().find { ConnectionIdHolder(it.connectionPassword).id == connectorId }
+                ?: return@withContext null
+
+            saveP2PLinks(p2pLinks.remove(p2pLink).asList())
             peerdroidClient.deleteLink(p2pLink.connectionPassword)
+            p2pLink
         }
     }
 

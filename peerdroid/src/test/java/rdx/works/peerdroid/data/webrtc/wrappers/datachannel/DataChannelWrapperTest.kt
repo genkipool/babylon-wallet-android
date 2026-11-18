@@ -13,6 +13,7 @@ import org.junit.Test
 import org.webrtc.DataChannel
 import rdx.works.peerdroid.domain.ConnectionIdHolder
 import java.util.Collections
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
@@ -22,6 +23,7 @@ class DataChannelWrapperTest {
     fun `the packages of two messages sent at once never interleave`() = runBlocking {
         val sentMessageIds = Collections.synchronizedList(mutableListOf<String>())
         val dataChannel = mockk<DataChannel>(relaxed = true) {
+            every { state() } returns DataChannel.State.OPEN
             every { send(any()) } answers {
                 val buffer = firstArg<DataChannel.Buffer>().data
                 val bytes = ByteArray(buffer.remaining()).also { buffer.get(it) }
@@ -43,5 +45,26 @@ class DataChannelWrapperTest {
         assertTrue(results.all { it.isSuccess })
         val runs = sentMessageIds.zipWithNext().count { (previous, next) -> previous != next }
         assertEquals(1, runs, "each message's packages are sent together: $sentMessageIds")
+    }
+
+    @Test
+    fun `a message sent while the data channel is still opening waits for it`() = runBlocking {
+        val sent = Collections.synchronizedList(mutableListOf<DataChannel.State>())
+        val state = AtomicReference(DataChannel.State.CONNECTING)
+        val dataChannel = mockk<DataChannel>(relaxed = true) {
+            every { state() } answers { state.get() }
+            every { send(any()) } answers {
+                sent.add(state.get())
+                state.get() == DataChannel.State.OPEN
+            }
+        }
+        val wrapper = DataChannelWrapper(ConnectionIdHolder("link"), dataChannel)
+
+        val result = async(Dispatchers.Default) { wrapper.sendMessage("""{"discriminator":"accountList"}""") }
+        Thread.sleep(100)
+        state.set(DataChannel.State.OPEN)
+
+        assertTrue(result.await().isSuccess)
+        assertTrue(sent.isNotEmpty() && sent.all { it == DataChannel.State.OPEN }, "sent only once open: $sent")
     }
 }
