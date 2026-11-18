@@ -79,7 +79,7 @@ class CompositePeerdroidConnectorTest {
     // ---- which transports connect
 
     @Test
-    fun `by default links are connected over WebRTC only`() = runTest {
+    fun `by default links are connected over WebRTC until they are known to support iroh`() = runTest {
         val sut = composite(RadixConnectTransport.DEFAULT)
 
         assertTrue(sut.connectToConnectorExtension(transportProfile, passwordA).isSuccess)

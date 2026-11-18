@@ -46,25 +46,7 @@
 
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-
-                <data android:scheme="radixwallet" />
-                <data android:host="*" />
-            </intent-filter>
-            <intent-filter android:autoVerify="true">
-                <action android:name="android.intent.action.VIEW" />
-
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-
-                <data
-                    android:host="radixdlt.onelink.me"
-                    android:scheme="https" />
-            </intent-filter>
+            <!-- Tester build: no radixwallet:// links and no App Links, so it never opens links meant for the official wallet. -->
         </activity>
         <activity
             android:name=".presentation.lockscreen.AppLockActivity"

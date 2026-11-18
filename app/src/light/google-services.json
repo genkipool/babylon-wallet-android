@@ -56,6 +56,32 @@
           "current_key": ""
         }
       ]
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:0:android:0",
+        "android_client_info": {
+          "package_name": "io.github.genkipool.radixwallet.iroh"
+        }
+      },
+      "api_key": [
+        {
+          "current_key": ""
+        }
+      ]
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:0:android:0",
+        "android_client_info": {
+          "package_name": "io.github.genkipool.radixwallet.iroh.debug"
+        }
+      },
+      "api_key": [
+        {
+          "current_key": ""
+        }
+      ]
     }
   ],
   "configuration_version": "1"

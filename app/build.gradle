@@ -57,18 +57,19 @@ android {
 
     compileSdk rootProject.ext.compileSdk
     defaultConfig {
-        applicationId "com.radixpublishing.radixwallet.android"
+        // Tester build of Radix Connect over iroh: its own package, so it installs next to the official wallet.
+        applicationId "io.github.genkipool.radixwallet.iroh"
         minSdk rootProject.ext.minSdk
         targetSdk rootProject.ext.targetSdk
         versionCode 97
-        versionName "1.22.3"
+        versionName "1.22.3-iroh.2"
         buildConfigField "boolean", "DEBUG_MODE", "true"
         buildConfigField "boolean", "CRASH_REPORTING_AVAILABLE", "false"
         buildConfigField "boolean", "EXPERIMENTAL_FEATURES_ENABLED", "true"
         buildConfigField "boolean", "FILE_LOGGER_ENABLED", "true"
         buildConfigField "String", "WELL_KNOWN_URL_SUFFIX", '".well-known/radix.json"'
         buildConfigField "String", "IMAGE_HOST_BASE_URL", '"https://image-service-dev.extratools.works"'
-        resValue "string", "app_name", "Radix Wallet"
+        resValue "string", "app_name", "Radix Wallet iroh test"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
