@@ -6,6 +6,7 @@ import com.babylon.wallet.android.data.gateway.apis.StateApi
 import com.babylon.wallet.android.data.gateway.apis.StreamApi
 import com.babylon.wallet.android.data.gateway.apis.TransactionApi
 import com.babylon.wallet.android.data.repository.p2plink.RetiredP2PLinksRepository
+import com.babylon.wallet.android.di.coroutines.ApplicationScope
 import com.radixdlt.sargon.Gateway
 import com.radixdlt.sargon.extensions.string
 import dagger.Module
@@ -13,6 +14,7 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
 import rdx.works.core.di.DynamicGatewayHttpClient
@@ -40,12 +42,14 @@ object NetworkApiModule {
         peerdroidConnector: PeerdroidConnector,
         retiredP2PLinksRepository: RetiredP2PLinksRepository,
         @IoDispatcher ioDispatcher: CoroutineDispatcher,
-        json: Json
+        json: Json,
+        @ApplicationScope applicationScope: CoroutineScope
     ): PeerdroidClient = PeerdroidClientImpl(
         peerdroidConnector = peerdroidConnector,
         retiredP2PLinksRepository = retiredP2PLinksRepository,
         ioDispatcher = ioDispatcher,
-        json = json
+        json = json,
+        applicationScope = applicationScope
     )
 
     @Provides
